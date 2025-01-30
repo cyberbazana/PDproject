@@ -1,7 +1,6 @@
 #include <iostream>
 #include <numeric>
 #include <fstream>
-#include "numpy_funcs.h"
 #include "distributions.h"
 #include "RK4.h"
 #include "spacial_moments.h"
@@ -20,34 +19,25 @@ const size_t size = 1 + (2 * N + 1) + (2 * N + 1) * (2 * N + 1);
 const double xi2 = 1;
 const double xi3 = 1;
 
+const int total_time = 1600;
+
 int main() {
     std::ofstream outFile("data.csv");
 
     auto uGaussian = UGaussian(s_dispersal_radius);
     auto wGaussian = WGaussian(c_competition_death, sigma_competition_radius);
-    std::vector<double> grid = linspace(-L, L, 2 * N + 1);
-    std::vector<double> dz_mask(2 * N + 1, 1);
-
-    dz_mask[2 * N] = 1.0 / 3.0;
-    for (int64_t i = 2 * N - 1; i >= 1; i -= 2) {
-        dz_mask[i] = 4.0 / 3.0;
-        dz_mask[i - 1] = 2.0 / 3.0;
-    }
-    dz_mask[0] = 1.0 / 3.0;
 
     std::vector<double> init_y(size, std::pow(6.38, 3) * xi3);
     init_y[0] = 6.38;
     for (size_t i = 1; i < 2 * N + 2; ++i) {
         init_y[i] = std::pow(init_y[0], 2) * xi2;
     }
-    Eigen::VectorXd eigen_grid = Eigen::Map<const Eigen::VectorXd>(grid.data(), grid.size());
-    Eigen::VectorXd eigen_dz_mask = Eigen::Map<const Eigen::VectorXd>(dz_mask.data(), dz_mask.size());
     Eigen::VectorXd eigen_init = Eigen::Map<const Eigen::VectorXd>(init_y.data(), init_y.size());
-    SpacialMoments model(N, eigen_dz_mask, eigen_grid, h, q_death, q_birth);
+    SpacialMoments model(N, L, h, q_death, q_birth);
     model.MakeMasks(uGaussian, wGaussian);
-    RK4 rk4(delta_t, model, N, L);
+    RK4 rk4(delta_t, model);
     double st = 0.0;
-    for (size_t i = 0; i < 1600; ++i) {
+    for (size_t i = 0; i < total_time; ++i) {
         Eigen::VectorXd res = rk4.GetValues(eigen_init);
         st += delta_t;
         eigen_init = std::move(res);

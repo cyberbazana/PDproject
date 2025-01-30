@@ -3,16 +3,25 @@
 #include <cstddef>
 #include <vector>
 #include "distributions.h"
+#include "numpy_funcs.h"
 #include "Eigen/Dense"
 
 class SpacialMoments {
 public:
-    SpacialMoments(int N, const Eigen::VectorXd &dz_mask, const Eigen::VectorXd &grid,
-                   double h, double q_death,
-                   double q_birth) {
+    SpacialMoments(int N, int L, double h, double q_death, double q_birth) {
         N_ = N;
-        dz_mask_ = dz_mask;
-        grid_ = grid;
+
+        std::vector<double> dz_mask(2 * N + 1, 1);
+
+        dz_mask[2 * N] = 1.0 / 3.0;
+        for (int64_t i = 2 * N - 1; i >= 1; i -= 2) {
+            dz_mask[i] = 4.0 / 3.0;
+            dz_mask[i - 1] = 2.0 / 3.0;
+        }
+        dz_mask[0] = 1.0 / 3.0;
+
+        dz_mask_ = Eigen::Map<const Eigen::VectorXd>(dz_mask.data(), dz_mask.size());
+        grid_ = Eigen::Map<const Eigen::VectorXd>(linspace(-L, L, 2 * N + 1).data(), (2 * N + 1));
         h_ = h;
         q_death_ = q_death;
         q_birth_ = q_birth;
@@ -21,10 +30,13 @@ public:
     }
 
     double
-    GetCorrectMoment(const Eigen::VectorXd &prev_y, size_t i);
+    GetCorrectMoment(const Eigen::VectorXd &y, size_t ind_i);
 
     void MakeMasks(UGaussian &uGaussian, WGaussian &wGaussian);
 
+    [[nodiscard]] int GetN() const {
+        return N_;
+    }
 
 private:
     int N_;
