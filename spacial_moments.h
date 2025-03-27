@@ -8,7 +8,7 @@
 
 class SpacialMoments {
 public:
-    SpacialMoments(int N, int L, double h, double q_death, double q_birth) {
+    SpacialMoments(int N, int L, double q_death, double q_birth) {
         N_ = N;
 
         std::vector<double> dz_mask(2 * N + 1, 1);
@@ -22,7 +22,7 @@ public:
 
         dz_mask_ = Eigen::Map<const Eigen::VectorXd>(dz_mask.data(), dz_mask.size());
         grid_ = Eigen::Map<const Eigen::VectorXd>(linspace(-L, L, 2 * N + 1).data(), (2 * N + 1));
-        h_ = h;
+        h_ = static_cast<double>(L) / static_cast<double>(N);
         q_death_ = q_death;
         q_birth_ = q_birth;
         grid_u_ = Eigen::VectorXd::Zero(2 * N + 1);

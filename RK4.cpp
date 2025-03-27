@@ -44,6 +44,7 @@ Eigen::VectorXd RK4::GetValues(const Eigen::VectorXd &y) {
         }
     }
     threads.clear();
+    Normalize(k_1);
     Eigen::VectorXd k_1_vector_divided_by_two = k_1 * 0.5;
     Eigen::VectorXd sum_for_k_2 = k_1_vector_divided_by_two + y;
 
@@ -59,7 +60,7 @@ Eigen::VectorXd RK4::GetValues(const Eigen::VectorXd &y) {
         }
     }
     threads.clear();
-
+    Normalize(k_2);
     Eigen::VectorXd k_2_vector_divided_by_two = k_2 * 0.5;
     Eigen::VectorXd sum_for_k_3 =
             k_2_vector_divided_by_two + y;
@@ -76,7 +77,7 @@ Eigen::VectorXd RK4::GetValues(const Eigen::VectorXd &y) {
         }
     }
     threads.clear();
-
+    Normalize(k_3);
     Eigen::VectorXd sum_for_k_4 = k_3 + y;
     for (size_t i = 0; i < number_threads; ++i) {
         threads.emplace_back(op, std::ref(k_4), std::ref(sum_for_k_4), i * chunk, (i + 1) * chunk);
@@ -90,7 +91,7 @@ Eigen::VectorXd RK4::GetValues(const Eigen::VectorXd &y) {
         }
     }
     threads.clear();
-
+    Normalize(k_4);
     ans = y + ((k_1 + 2 * k_2 + 2 * k_3 + k_4) / 6.0);
     Normalize(ans);
     return ans;
@@ -107,15 +108,38 @@ Eigen::VectorXd RK4::GetValues(const Eigen::VectorXd &y) {
 
 void RK4::Normalize(Eigen::VectorXd &new_y) const {
     size_t size = 1 + (2 * N_ + 1) + (2 * N_ + 1) * (2 * N_ + 1);
-    for (size_t i = 1; i < size; ++i) {
-        if (i <= 2 * N_ + 1) {
-            if (std::abs(new_y[i] - new_y[2 * N_ + 1 - i + 1]) > eps) {
-                double mid = (new_y[i] + new_y[2 * N_ + 1 - i + 1]) / 2;
-                new_y[i] = mid;
-                new_y[2 * N_ + 1 - i + 1] = mid;
+    for (size_t ind = 1; ind < size; ++ind) {
+        if (ind <= 2 * N_ + 1) {
+            if (std::abs(new_y[ind] - new_y[2 * N_ + 1 - ind + 1]) > eps) {
+                double mid = std::min(new_y[ind], new_y[2 * N_ + 1 - ind + 1]);
+                new_y[ind] = mid;
+                new_y[2 * N_ + 1 - ind + 1] = mid;
             }
         } else {
-            // TODO, but works fine
+            auto indexes = GetPairRelativeIndexForThirdMoment(ind, N_);
+            int64_t i = indexes.first;
+            int64_t j = indexes.second;
+
+            double mid = std::min(std::min(std::min(new_y[ind], new_y[GetAbsoluteIndexFromThirdMoment(-i, -j, N_)]),
+                                           new_y[GetAbsoluteIndexFromThirdMoment(-j, -i, N_)]),
+                                  new_y[GetAbsoluteIndexFromThirdMoment(j, i, N_)]);
+            if (std::abs(i - j) <= N_) {
+                mid = std::min(mid, new_y[GetAbsoluteIndexFromThirdMoment(-i, j - i, N_)]);
+                mid = std::min(mid, new_y[GetAbsoluteIndexFromThirdMoment(j - i, -i, N_)]);
+                mid = std::min(mid, new_y[GetAbsoluteIndexFromThirdMoment(i - j, -j, N_)]);
+                mid = std::min(mid, new_y[GetAbsoluteIndexFromThirdMoment(-j, i - j, N_)]);
+            }
+            new_y[ind] = mid;
+            new_y[GetAbsoluteIndexFromThirdMoment(-i, -j, N_)] = mid;
+            new_y[GetAbsoluteIndexFromThirdMoment(-j, -i, N_)] = mid;
+            new_y[GetAbsoluteIndexFromThirdMoment(i, j, N_)] = mid;
+            new_y[GetAbsoluteIndexFromThirdMoment(j, i, N_)] = mid;
+            if (std::abs(i - j) <= N_) {
+                new_y[GetAbsoluteIndexFromThirdMoment(-i, j - i, N_)] = mid;
+                new_y[GetAbsoluteIndexFromThirdMoment(j - i, -i, N_)] = mid;
+                new_y[GetAbsoluteIndexFromThirdMoment(i - j, -j, N_)] = mid;
+                new_y[GetAbsoluteIndexFromThirdMoment(-j, i - j, N_)] = mid;
+            }
         }
     }
 }
@@ -135,8 +159,9 @@ void RK4::ApplyToKth(const Eigen::VectorXd &y, Eigen::VectorXd &k, size_t ind) {
     if (ind <= 2 * N_ + 1) {
         k[ind] = delta_t_ * model_->GetCorrectMoment(y, ind);
     } else {
-        int64_t i = GetPairRelativeIndexForThirdMoment(ind, N_).first;
-        int64_t j = GetPairRelativeIndexForThirdMoment(ind, N_).second;
+        auto indexes = GetPairRelativeIndexForThirdMoment(ind, N_);
+        int64_t i = indexes.first;
+        int64_t j = indexes.second;
         if (k(GetAbsoluteIndexFromThirdMoment(-i, -j, N_)) != 0.0) {
             k[ind] = k[GetAbsoluteIndexFromThirdMoment(-i, -j, N_)];
             return;
